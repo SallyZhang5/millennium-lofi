@@ -1,17 +1,58 @@
-# 编译产物
-build/
-build_local/
-out/
-dist/
+name: build-vst3
 
-# IDE / 编辑器
-.vs/
-.vscode/
-*.user
-*.suo
-*.sln
-*.vcxproj*
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+  workflow_dispatch:
 
-# 系统
-Thumbs.db
-.DS_Store
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: 取出代码
+        uses: actions/checkout@v4
+
+      - name: 显示编译器版本
+        run: cmake --version
+
+      - name: 配置（第一次会下载 JUCE，大约 1 分钟）
+        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+
+      - name: 编译插件和离线测试程序
+        run: cmake --build build --config Release --parallel 4
+
+      - name: 运行离线自检（渲染一段测试音频并检查输出）
+        shell: pwsh
+        run: |
+          $exe = Get-ChildItem -Path build -Recurse -Filter render_test.exe | Select-Object -First 1
+          if (-not $exe) { throw "没有找到 render_test.exe" }
+          Write-Host "使用 $($exe.FullName)"
+          & $exe.FullName --write build\selftest.wav
+          if ($LASTEXITCODE -ne 0) { throw "自检失败" }
+
+      - name: 收集成品
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          $vst3 = Get-ChildItem -Path build -Recurse -Filter "*.vst3" |
+                    Where-Object { $_.PSIsContainer } | Select-Object -First 1
+          if (-not $vst3) { Get-ChildItem -Path build -Recurse -Depth 2 | Out-String; throw "没有找到 .vst3" }
+          Copy-Item $vst3.FullName dist -Recurse -Force
+          Write-Host "插件: $($vst3.FullName)"
+
+          $standalone = Get-ChildItem -Path build -Recurse -Filter "Millennium LoFi.exe" |
+                          Select-Object -First 1
+          if ($standalone) { Copy-Item $standalone.FullName dist -Force; Write-Host "独立版: $($standalone.FullName)" }
+
+          Get-ChildItem dist -Recurse | Select-Object FullName
+          Copy-Item build\selftest.wav dist\ -ErrorAction SilentlyContinue
+
+      - name: 上传成品
+        uses: actions/upload-artifact@v4
+        with:
+          name: MillenniumLoFi-vst3
+          path: dist/
+          if-no-files-found: error
