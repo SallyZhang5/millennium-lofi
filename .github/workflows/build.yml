@@ -3,28 +3,60 @@ name: build-vst3
 on:
   push:
     branches: [ main ]
-  pull_request:
   workflow_dispatch:
 
 jobs:
   windows:
     runs-on: windows-latest
     timeout-minutes: 60
+    permissions:
+      contents: write
 
     steps:
       - name: 取出代码
         uses: actions/checkout@v4
 
-      - name: 显示编译器版本
-        run: cmake --version
+      - name: 显示构建环境
+        shell: pwsh
+        run: |
+          Write-Host "== CMake =="
+          cmake --version
+          Write-Host "== Git =="
+          git --version
+          Write-Host "== 可用的 Visual Studio 生成器 =="
+          cmake --help | Select-String "Visual Studio"
 
-      - name: 配置（第一次会下载 JUCE，大约 1 分钟）
-        run: cmake -S . -B build -G "Visual Studio 17 2022" -A x64
+      - name: 下载 JUCE 框架
+        shell: pwsh
+        run: |
+          git clone --depth 1 --branch 8.0.15 https://github.com/juce-framework/JUCE.git juce
+          if ($LASTEXITCODE -ne 0) { throw "下载 JUCE 失败" }
+          Write-Host "JUCE 已下载到 $env:GITHUB_WORKSPACE\juce"
+
+      - name: 配置
+        shell: pwsh
+        run: |
+          cmake -S . -B build -A x64 -DFETCHCONTENT_SOURCE_DIR_JUCE="$env:GITHUB_WORKSPACE\juce" 2>&1 |
+            Tee-Object -FilePath configure.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "================ 配置失败，下面是最后 60 行 ================"
+            Get-Content configure.log -Tail 60
+            throw "CMake 配置失败"
+          }
 
       - name: 编译插件和离线测试程序
-        run: cmake --build build --config Release --parallel 4
+        shell: pwsh
+        run: |
+          cmake --build build --config Release --parallel 4 2>&1 | Tee-Object -FilePath build.log
+          if ($LASTEXITCODE -ne 0) {
+            Write-Host ""
+            Write-Host "================ 编译失败，下面是最后 60 行 ================"
+            Get-Content build.log -Tail 60
+            throw "编译失败"
+          }
 
-      - name: 运行离线自检（渲染一段测试音频并检查输出）
+      - name: 运行离线自检
         shell: pwsh
         run: |
           $exe = Get-ChildItem -Path build -Recurse -Filter render_test.exe | Select-Object -First 1
@@ -39,16 +71,22 @@ jobs:
           New-Item -ItemType Directory -Force -Path dist | Out-Null
           $vst3 = Get-ChildItem -Path build -Recurse -Filter "*.vst3" |
                     Where-Object { $_.PSIsContainer } | Select-Object -First 1
-          if (-not $vst3) { Get-ChildItem -Path build -Recurse -Depth 2 | Out-String; throw "没有找到 .vst3" }
+          if (-not $vst3) {
+            Get-ChildItem -Path build -Recurse -Depth 3 | Out-String | Write-Host
+            throw "没有找到 .vst3"
+          }
           Copy-Item $vst3.FullName dist -Recurse -Force
           Write-Host "插件: $($vst3.FullName)"
 
           $standalone = Get-ChildItem -Path build -Recurse -Filter "Millennium LoFi.exe" |
                           Select-Object -First 1
-          if ($standalone) { Copy-Item $standalone.FullName dist -Force; Write-Host "独立版: $($standalone.FullName)" }
+          if ($standalone) {
+            Copy-Item $standalone.FullName dist -Force
+            Write-Host "独立版: $($standalone.FullName)"
+          }
 
-          Get-ChildItem dist -Recurse | Select-Object FullName
           Copy-Item build\selftest.wav dist\ -ErrorAction SilentlyContinue
+          Get-ChildItem dist -Recurse | Select-Object FullName
 
       - name: 上传成品
         uses: actions/upload-artifact@v4
@@ -56,3 +94,27 @@ jobs:
           name: MillenniumLoFi-vst3
           path: dist/
           if-no-files-found: error
+
+      - name: 失败时记录错误日志（方便排查）
+        if: failure()
+        shell: pwsh
+        run: |
+          $report = "# 构建失败记录`n`n"
+          $report += "时间: " + (Get-Date -Format o) + "`n"
+          $report += "运行: $env:GITHUB_RUN_ID (第 $env:GITHUB_RUN_ATTEMPT 次)`n"
+          $report += "提交: $env:GITHUB_SHA`n"
+          if (Test-Path configure.log) {
+            $report += "`n===== 配置日志 =====`n" + (Get-Content configure.log -Raw)
+          }
+          if (Test-Path build.log) {
+            $report += "`n===== 编译日志 =====`n" + (Get-Content build.log -Raw)
+          }
+          if (-not (Test-Path configure.log) -and -not (Test-Path build.log)) {
+            $report += "`n（没有捕获到日志文件）`n"
+          }
+          $report | Out-File -FilePath last-error.md -Encoding utf8
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add last-error.md
+          git commit -m "record build error [skip ci]"
+          git push origin HEAD:main
