@@ -1,0 +1,17 @@
+# 编译产物
+build/
+build_local/
+out/
+dist/
+
+# IDE / 编辑器
+.vs/
+.vscode/
+*.user
+*.suo
+*.sln
+*.vcxproj*
+
+# 系统
+Thumbs.db
+.DS_Store
