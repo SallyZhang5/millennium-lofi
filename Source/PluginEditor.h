@@ -44,7 +44,7 @@ private:
     MillenniumLoFiProcessor& processor;
     XpLookAndFeel lookAndFeel;
 
-    juce::GroupComponent presetGroup, infoGroup, statusGroup, tapeGroup, digitalGroup, speakerGroup;
+    juce::GroupComponent presetGroup, infoGroup, tapeGroup, digitalGroup, speakerGroup;
 
     juce::ComboBox presetBox;
     juce::TextEditor nameEditor;
@@ -53,7 +53,6 @@ private:
     juce::TextButton revealButton { u8("打开预设文件夹") };
     juce::Label statusLabel;
     juce::Label descriptionLabel;
-    juce::Label statusHint;
 
     juce::Label codecLabel;
     juce::ComboBox codecBox;
