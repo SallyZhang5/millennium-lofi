@@ -1,4 +1,4 @@
-/*
+﻿/*
     Offline renderer / self test.
 
     Renders a WAV through the same engine the plugin uses and prints a small set
@@ -171,6 +171,109 @@ void printMetrics (const char* label, const Metrics& m)
                  m.finite ? "yes" : "NO");
 }
 
+/*  Stability checks.
+
+    Feeds the engine loud transients (louder than full scale, like a clipped
+    host signal) with extreme settings, then silence, and makes sure that
+
+      * nothing ever becomes NaN or infinite,
+      * the output stays inside the valid range,
+      * the engine does not keep generating a tone of its own once the input
+        stops — that is exactly what a "random harsh beep" would be.
+*/
+bool runStabilityChecks()
+{
+    struct Case
+    {
+        const char* name;
+        Params params;
+        bool checkTail;
+    };
+
+    std::vector<Case> cases;
+    {
+        Params p;
+        p.bitDepth = 4.0f; p.sampleRate = 4000.0f; p.tapeLowpass = 1500.0f;
+        p.wow = 1.0f; p.drive = 1.0f; p.hissDb = -90.0f; p.humDb = -90.0f;
+        p.codecKbps = 24; p.speakerHighpass = 700.0f; p.speakerLowpass = 1500.0f;
+        p.resonance = 1.0f; p.reverb = 1.0f; p.width = 0.0f; p.outputDb = 6.0f;
+        cases.push_back ({ "极端低端", p, true });
+    }
+    {
+        Params p;
+        p.bitDepth = 16.0f; p.sampleRate = 48000.0f; p.tapeLowpass = 12000.0f;
+        p.wow = 0.0f; p.drive = 0.0f; p.hissDb = -90.0f; p.humDb = -90.0f;
+        p.codecKbps = 320; p.speakerHighpass = 20.0f; p.speakerLowpass = 12000.0f;
+        p.resonance = 1.0f; p.reverb = 1.0f; p.width = 1.0f; p.outputDb = 6.0f;
+        cases.push_back ({ "极端高端", p, true });
+    }
+    {
+        Params p;   /* default preset */
+        cases.push_back ({ "默认设置", p, true });
+    }
+    {
+        Params p;   /* loud hiss has to stay finite even if it never goes quiet */
+        p.hissDb = -20.0f; p.humDb = -30.0f; p.reverb = 1.0f; p.drive = 1.0f;
+        cases.push_back ({ "最大底噪", p, false });
+    }
+
+    const double sr = 48000.0;
+    const int blockSize = 512;
+    bool allPassed = true;
+
+    for (const auto& testCase : cases)
+    {
+        LoFiEngine engine;
+        engine.prepare (sr, blockSize, 2);
+
+        std::vector<float> left (blockSize), right (blockSize);
+        Rng rng (7u);
+        float peak = 0.0f;
+        bool finite = true;
+
+        const int loudBlocks = static_cast<int> (2.0 * sr / blockSize);
+        for (int block = 0; block < loudBlocks; ++block)
+        {
+            for (int i = 0; i < blockSize; ++i)
+            {
+                const float transient = rng.nextUnipolar() < 0.02f ? 3.0f : 0.0f;
+                left[static_cast<std::size_t> (i)] = transient + 0.9f * std::sin (0.31f * i);
+                right[static_cast<std::size_t> (i)] = -transient + 0.9f * std::sin (0.29f * i);
+            }
+            float* pointers[2] = { left.data(), right.data() };
+            engine.process (pointers, 2, blockSize, testCase.params);
+            for (int i = 0; i < blockSize; ++i)
+            {
+                if (! std::isfinite (left[static_cast<std::size_t> (i)])
+                    || ! std::isfinite (right[static_cast<std::size_t> (i)]))
+                    finite = false;
+                peak = std::max (peak, std::abs (left[static_cast<std::size_t> (i)]));
+                peak = std::max (peak, std::abs (right[static_cast<std::size_t> (i)]));
+            }
+        }
+
+        float tail = 0.0f;
+        const int silentBlocks = static_cast<int> (3.0 * sr / blockSize);
+        for (int block = 0; block < silentBlocks; ++block)
+        {
+            std::fill (left.begin(), left.end(), 0.0f);
+            std::fill (right.begin(), right.end(), 0.0f);
+            float* pointers[2] = { left.data(), right.data() };
+            engine.process (pointers, 2, blockSize, testCase.params);
+            if (block > static_cast<int> (2.5 * sr / blockSize))
+                for (int i = 0; i < blockSize; ++i)
+                    tail = std::max (tail, std::abs (left[static_cast<std::size_t> (i)]));
+        }
+
+        const bool passed = finite && peak <= 1.001f && (! testCase.checkTail || tail < 0.002f);
+        allPassed = allPassed && passed;
+        std::printf ("  [%s] %-10s 峰值 %.4f  静音后残留 %.6f\n",
+                     passed ? "PASS" : "FAIL", testCase.name, peak, tail);
+    }
+
+    return allPassed;
+}
+
 } // namespace
 
 int main (int argc, char** argv)
@@ -266,5 +369,10 @@ int main (int argc, char** argv)
 
     const bool ok = after.finite && after.peakDb <= 0.05 && after.rmsDb > -80.0;
     std::printf ("self test: %s\n", ok ? "PASS" : "FAIL");
-    return ok ? 0 : 1;
+
+    std::printf ("\nstability checks:\n");
+    const bool stable = runStabilityChecks();
+    std::printf ("stability: %s\n", stable ? "PASS" : "FAIL");
+
+    return (ok && stable) ? 0 : 1;
 }

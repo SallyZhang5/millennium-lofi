@@ -68,9 +68,6 @@ public:
 
         driftValue = 0.0f;
         modOffset = 0.0f;
-        resamplePhase = 0.0;
-        heldPrevious = 0.0f;
-        heldCurrent = 0.0f;
         sampleClock = 0;
         reverb.prepare (fs, numChannels);
         reverb.setDecaySeconds (0.42);
@@ -85,8 +82,6 @@ public:
             resetChannel (s);
         reverb.reset();
         modOffset = 0.0f;
-        heldPrevious = heldCurrent = 0.0f;
-        resamplePhase = 0.0;
     }
 
     /*  Reported to the host; the approximation codec needs no lookahead. */
@@ -122,6 +117,10 @@ public:
             const float dryLeft = left;
             const float dryRight = right;
 
+            /*  never let a bad sample from the host poison the filter states */
+            if (! std::isfinite (left))  left = 0.0f;
+            if (! std::isfinite (right)) right = 0.0f;
+
             if (stereo)
             {
                 const float mid = (left + right) * 0.5f;
@@ -139,13 +138,24 @@ public:
             /* slow random drift: one pole filtered noise, integrated below */
             const float driftNoise = driftRng.nextBipolar();
             driftValue += (driftNoise - driftValue) * 0.00035f;
-            const double driftMod = wowAmount * static_cast<double> (driftValue) * 0.02;
-            modOffset += (wowMod + flutterMod + driftMod);
-            modOffset = clampf (modOffset, -12.0f, 12.0f);
+            if (! std::isfinite (driftValue))
+                driftValue = 0.0f;
+            driftValue = clampf (driftValue, -0.05f, 0.05f);
+
+            /*  The wow and flutter sines are integrated into a position offset
+                (that is what makes the pitch wobble). The slow drift is added
+                directly as a small position wobble instead: integrating noise
+                would let the offset wander off and read outside the delay line,
+                which is what produced the random harsh tone. */
+            modOffset += static_cast<float> (wowMod + flutterMod);
+            if (! std::isfinite (modOffset))
+                modOffset = 0.0f;
+            modOffset = clampf (modOffset, -1.5f, 1.5f);
             ++sampleClock;
 
-            float outL = processChannel (0, left, p, wowAmount, driveGain, driveNorm);
-            float outR = stereo ? processChannel (1, right, p, wowAmount, driveGain, driveNorm)
+            const float driftOffset = wowAmount * driftValue * 2.0f;
+            float outL = processChannel (0, left, p, driftOffset, driveGain, driveNorm);
+            float outR = stereo ? processChannel (1, right, p, driftOffset, driveGain, driveNorm)
                                 : outL;
 
             const float wetL = reverb.process (0, outL);
@@ -156,6 +166,17 @@ public:
 
             outL = softClip (outL * outGain);
             outR = softClip (outR * outGain);
+
+            /*  last line of defence: if anything ever goes non-finite, clear the
+                affected state instead of letting a tone or noise burst through */
+            if (! std::isfinite (outL) || ! std::isfinite (outR))
+            {
+                for (auto& s : channelState)
+                    resetChannel (s);
+                reverb.reset();
+                outL = 0.0f;
+                outR = 0.0f;
+            }
 
             (void) dryLeft;
             (void) dryRight;
@@ -184,6 +205,11 @@ private:
         Biquad hissLowpass;
         Rng hissRng { 911u };
         Rng ditherRng { 4242u };
+        /*  the sample rate reducer needs its own state per channel, otherwise
+            the two channels overwrite each other's interpolator */
+        double resamplePhase = 0.0;
+        float heldPrevious = 0.0f;
+        float heldCurrent = 0.0f;
     };
 
     void prepareChannel (ChannelState& s, int index)
@@ -204,6 +230,9 @@ private:
         s.hissLowpass = Biquad::lowpass (fs, 9000.0, 0.7);
         s.hissRng = Rng (911u + static_cast<std::uint32_t> (index) * 7919u);
         s.ditherRng = Rng (4242u + static_cast<std::uint32_t> (index) * 104729u);
+        s.resamplePhase = 0.0;
+        s.heldPrevious = 0.0f;
+        s.heldCurrent = 0.0f;
         resetChannel (s);
     }
 
@@ -221,6 +250,9 @@ private:
         s.speakerPeakMid.reset();
         s.hissHighpass.reset();
         s.hissLowpass.reset();
+        s.resamplePhase = 0.0;
+        s.heldPrevious = 0.0f;
+        s.heldCurrent = 0.0f;
     }
 
     void updateFilters (const Params& p)
@@ -245,7 +277,7 @@ private:
             lastCodecKbps = p.codecKbps;
             const float cutoff = codecCutoffFor (p.codecKbps) * static_cast<float> (fs / 44100.0);
             for (auto& s : channelState)
-                s.codecBand.setupLowpass (fs, cutoff > 0.0f ? cutoff : static_cast<float> (fs * 0.45), 8);
+                s.codecBand.setupLowpass (fs, cutoff > 0.0f ? cutoff : static_cast<float> (fs * 0.45), 4);
         }
 
         if (std::abs (p.speakerHighpass - lastSpeakerHi) > 1.0f)
@@ -276,12 +308,12 @@ private:
     }
 
     inline float processChannel (int index, float x, const Params& p,
-                                 float wowAmount, float driveGain, float driveNorm) noexcept
+                                 float driftOffset, float driveGain, float driveNorm) noexcept
     {
         ChannelState& s = channelState[static_cast<std::size_t> (index)];
 
         /* --- tape transport (wow / flutter) --------------------------- */
-        const float readDelay = 4.0f + (wowAmount > 0.001f ? modOffset : 0.0f);
+        const float readDelay = 4.0f + modOffset + driftOffset;
         const float wowOut = s.wowLine.read (readDelay);
         s.wowLine.push (x);
         float y = wowOut;
@@ -313,14 +345,14 @@ private:
         if (targetRate < static_cast<float> (fs) * 0.99f)
         {
             const float filtered = s.antiAlias.process (y);
-            resamplePhase += static_cast<double> (targetRate) / fs;
-            if (resamplePhase >= 1.0)
+            s.resamplePhase += static_cast<double> (targetRate) / fs;
+            if (s.resamplePhase >= 1.0)
             {
-                resamplePhase -= 1.0;
-                heldPrevious = heldCurrent;
-                heldCurrent = filtered;
+                s.resamplePhase -= 1.0;
+                s.heldPrevious = s.heldCurrent;
+                s.heldCurrent = filtered;
             }
-            y = heldPrevious + (heldCurrent - heldPrevious) * static_cast<float> (resamplePhase);
+            y = s.heldPrevious + (s.heldCurrent - s.heldPrevious) * static_cast<float> (s.resamplePhase);
         }
 
         if (p.bitDepth < 15.95f)
@@ -381,9 +413,6 @@ private:
     Rng driftRng { 2000u };
     float driftValue = 0.0f;
     float modOffset = 0.0f;
-    double resamplePhase = 0.0;
-    float heldPrevious = 0.0f;
-    float heldCurrent = 0.0f;
 
     float lastTape = -1.0f, lastSpeakerHi = -1.0f, lastSpeakerLo = -1.0f, lastRes = -1.0f;
     float lastSampleRate = -1.0f;

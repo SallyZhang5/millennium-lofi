@@ -17,11 +17,11 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     /* ---- groups ---- */
     for (auto* group : { &presetGroup, &infoGroup, &tapeGroup, &digitalGroup, &speakerGroup })
         addAndMakeVisible (*group);
-    presetGroup.setText ("预设");
-    infoGroup.setText ("说明");
-    tapeGroup.setText ("磁带");
-    digitalGroup.setText ("数码");
-    speakerGroup.setText ("小喇叭与空间");
+    presetGroup.setText (u8("预设"));
+    infoGroup.setText (u8("说明"));
+    tapeGroup.setText (u8("磁带"));
+    digitalGroup.setText (u8("数码"));
+    speakerGroup.setText (u8("小喇叭与空间"));
 
     /* ---- preset panel ---- */
     addAndMakeVisible (presetBox);
@@ -29,7 +29,7 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     refreshPresetList();
 
     addAndMakeVisible (nameEditor);
-    nameEditor.setTextToShowWhenEmpty ("新预设的名字", juce::Colours::grey);
+    nameEditor.setTextToShowWhenEmpty (u8("新预设的名字"), juce::Colours::grey);
     nameEditor.setSelectAllWhenFocused (true);
 
     for (auto* button : { &saveButton, &deleteButton, &revealButton })
@@ -39,7 +39,7 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     revealButton.onClick = [this]
     {
         PresetManager::userPresetDirectory().revealToUser();
-        setStatus ("预设保存在：" + PresetManager::userPresetDirectory().getFullPathName());
+        setStatus (u8("预设保存在：") + PresetManager::userPresetDirectory().getFullPathName());
     };
 
     addAndMakeVisible (statusLabel);
@@ -56,27 +56,27 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     /* ---- sliders ---- */
     /*  The controls are parented to the editor and positioned on top of the group
         frames, so the layout does not depend on the group components. */
-    addSliderRow (*this, tapeRows, ids::wow, "磁带抖晃", "", 2);
-    addSliderRow (*this, tapeRows, ids::drive, "过载失真", "", 2);
-    addSliderRow (*this, tapeRows, ids::hissDb, "底噪嘶声", " dB", 0);
-    addSliderRow (*this, tapeRows, ids::humDb, "电流嗡声", " dB", 0);
-    addSliderRow (*this, tapeRows, ids::tapeLowpass, "磁带高频衰减", " Hz", 0);
+    addSliderRow (*this, tapeRows, ids::wow, u8("磁带抖晃"), "", 2);
+    addSliderRow (*this, tapeRows, ids::drive, u8("过载失真"), "", 2);
+    addSliderRow (*this, tapeRows, ids::hissDb, u8("底噪嘶声"), " dB", 0);
+    addSliderRow (*this, tapeRows, ids::humDb, u8("电流嗡声"), " dB", 0);
+    addSliderRow (*this, tapeRows, ids::tapeLowpass, u8("磁带高频衰减"), " Hz", 0);
 
-    addSliderRow (*this, digitalRows, ids::bitDepth, "颗粒感（位深）", " bit", 0);
-    addSliderRow (*this, digitalRows, ids::sampleRate, "数码采样率", " Hz", 0);
+    addSliderRow (*this, digitalRows, ids::bitDepth, u8("颗粒感（位深）"), " bit", 0);
+    addSliderRow (*this, digitalRows, ids::sampleRate, u8("数码采样率"), " Hz", 0);
 
     addAndMakeVisible (codecLabel);
-    codecLabel.setText ("MP3 码率", juce::dontSendNotification);
+    codecLabel.setText (u8("MP3 码率"), juce::dontSendNotification);
     addAndMakeVisible (codecBox);
     codecBox.addItemList (codecChoices(), 1);
     codecAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         state, ids::codecKbps, codecBox);
 
-    addSliderRow (*this, speakerRows, ids::speakerHighpass, "低音削减", " Hz", 0);
-    addSliderRow (*this, speakerRows, ids::speakerLowpass, "小喇叭高频", " Hz", 0);
-    addSliderRow (*this, speakerRows, ids::resonance, "喇叭共鸣", "", 2);
-    addSliderRow (*this, speakerRows, ids::reverb, "空间混响", "", 2);
-    addSliderRow (*this, speakerRows, ids::width, "立体声宽度", "", 2);
+    addSliderRow (*this, speakerRows, ids::speakerHighpass, u8("低音削减"), " Hz", 0);
+    addSliderRow (*this, speakerRows, ids::speakerLowpass, u8("小喇叭高频"), " Hz", 0);
+    addSliderRow (*this, speakerRows, ids::resonance, u8("喇叭共鸣"), "", 2);
+    addSliderRow (*this, speakerRows, ids::reverb, u8("空间混响"), "", 2);
+    addSliderRow (*this, speakerRows, ids::width, u8("立体声宽度"), "", 2);
 
     /* ---- bottom row ---- */
     addAndMakeVisible (bypassButton);
@@ -85,8 +85,8 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
 
     for (auto* label : { &mixLabel, &outputLabel })
         addAndMakeVisible (*label);
-    mixLabel.setText ("干湿比", juce::dontSendNotification);
-    outputLabel.setText ("输出音量", juce::dontSendNotification);
+    mixLabel.setText (u8("干湿比"), juce::dontSendNotification);
+    outputLabel.setText (u8("输出音量"), juce::dontSendNotification);
 
     for (auto* slider : { &mixSlider, &outputSlider })
         addAndMakeVisible (*slider);
@@ -102,7 +102,7 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     outputAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment> (
         state, ids::outputDb, outputSlider);
 
-    setStatus ("工厂预设可以直接用；调好后在左边起个名字保存成你自己的预设。");
+    setStatus (u8("工厂预设可以直接用；调好后在左边起个名字保存成你自己的预设。"));
 
     /*  Lay the editor out once here as well: some hosts never resize the window
         after it is created, in which case resized() would never see the controls. */
@@ -242,28 +242,8 @@ void MillenniumLoFiEditor::paint (juce::Graphics& g)
 
     g.setColour (juce::Colours::white);
     g.setFont (xp::uiFont (15.0f, true));
-    g.drawText ("千禧年声音 · Millennium LoFi · 实时插件版",
+    g.drawText (u8("千禧年声音 · Millennium LoFi · 实时插件版"),
                 title.reduced (10, 0), juce::Justification::centredLeft, false);
-
-    /*  ---- temporary diagnostics (removed once the layout is confirmed) ---- */
-    juce::String info;
-    info << "rows " << (int) tapeRows.size() << "/" << (int) digitalRows.size()
-         << "/" << (int) speakerRows.size();
-    info << "  tapeG " << tapeGroup.getWidth() << "x" << tapeGroup.getHeight()
-         << " @" << tapeGroup.getX() << "," << tapeGroup.getY();
-    if (! tapeRows.empty())
-    {
-        auto* row = tapeRows.front();
-        auto b = row->slider.getBounds();
-        info << "  slider " << b.getX() << "," << b.getY() << " " << b.getWidth() << "x" << b.getHeight()
-             << " vis=" << (int) row->slider.isVisible()
-             << " childOfEditor=" << (int) (row->slider.getParentComponent() == this)
-             << " gvis=" << (int) tapeGroup.isVisible();
-    }
-    g.setColour (juce::Colours::magenta);
-    g.setFont (13.0f);
-    g.drawText (info, getLocalBounds().removeFromTop (titleHeight).reduced (6, 0),
-                juce::Justification::centredRight, false);
 }
 
 /* ------------------------------------------------------------------ */
@@ -274,7 +254,7 @@ void MillenniumLoFiEditor::refreshPresetList()
     presetBox.clear (juce::dontSendNotification);
     presetNames.clear();
 
-    presetBox.addSectionHeading ("工厂预设");
+    presetBox.addSectionHeading (u8("工厂预设"));
     const auto& presets = factoryPresets();
     for (int i = 0; i < static_cast<int> (presets.size()); ++i)
         presetBox.addItem (presets[static_cast<std::size_t> (i)].name, i + 1);
@@ -283,7 +263,7 @@ void MillenniumLoFiEditor::refreshPresetList()
     if (! userNames.isEmpty())
     {
         presetBox.addSeparator();
-        presetBox.addSectionHeading ("我的预设");
+        presetBox.addSectionHeading (u8("我的预设"));
         for (int i = 0; i < userNames.size(); ++i)
         {
             presetNames.add (userNames[i]);
@@ -316,9 +296,9 @@ void MillenniumLoFiEditor::applySelectedPreset()
         {
             const auto name = presetNames[index];
             if (PresetManager::loadUserPreset (processor.apvts, name))
-                setStatus ("已载入我的预设：" + name);
+                setStatus (u8("已载入我的预设：") + name);
             else
-                setStatus ("预设文件读不出来：" + name, true);
+                setStatus (u8("预设文件读不出来：") + name, true);
         }
         return;
     }
@@ -330,7 +310,7 @@ void MillenniumLoFiEditor::applySelectedPreset()
         PresetManager::applyFactoryPreset (processor.apvts, index);
         descriptionLabel.setText (presets[static_cast<std::size_t> (index)].description,
                                   juce::dontSendNotification);
-        setStatus (juce::String ("已载入工厂预设：") + presets[static_cast<std::size_t> (index)].name);
+        setStatus (juce::String (u8("已载入工厂预设：")) + presets[static_cast<std::size_t> (index)].name);
     }
 }
 
@@ -339,7 +319,7 @@ void MillenniumLoFiEditor::saveCurrentAsPreset()
     const auto name = nameEditor.getText().trim();
     if (name.isEmpty())
     {
-        setStatus ("请先在输入框里写一个预设名字。", true);
+        setStatus (u8("请先在输入框里写一个预设名字。"), true);
         nameEditor.grabKeyboardFocus();
         return;
     }
@@ -355,11 +335,11 @@ void MillenniumLoFiEditor::saveCurrentAsPreset()
             updatingPresetBox = false;
         }
         nameEditor.clear();
-        setStatus ("已保存预设：" + name + "（保存在 " + PresetManager::userPresetDirectory().getFullPathName() + "）");
+        setStatus (u8("已保存预设：") + name + u8("（保存在 ") + PresetManager::userPresetDirectory().getFullPathName() + u8("）"));
     }
     else
     {
-        setStatus ("保存失败，请换一个名字再试。", true);
+        setStatus (u8("保存失败，请换一个名字再试。"), true);
     }
 }
 
@@ -367,7 +347,7 @@ void MillenniumLoFiEditor::deleteSelectedPreset()
 {
     if (! selectionIsUserPreset())
     {
-        setStatus ("只有「我的预设」里的条目可以删除，工厂预设不能删。", true);
+        setStatus (u8("只有「我的预设」里的条目可以删除，工厂预设不能删。"), true);
         return;
     }
 
@@ -377,17 +357,17 @@ void MillenniumLoFiEditor::deleteSelectedPreset()
 
     const auto name = presetNames[index];
     if (juce::AlertWindow::showOkCancelBox (juce::MessageBoxIconType::QuestionIcon,
-                                            "删除预设", "确定要删除「" + name + "」吗？",
-                                            "删除", "取消", this))
+                                            u8("删除预设"), u8("确定要删除「") + name + u8("」吗？"),
+                                            u8("删除"), u8("取消"), this))
     {
         if (PresetManager::deleteUserPreset (name))
         {
             refreshPresetList();
-            setStatus ("已删除预设：" + name);
+            setStatus (u8("已删除预设：") + name);
         }
         else
         {
-            setStatus ("删除失败：" + name, true);
+            setStatus (u8("删除失败：") + name, true);
         }
     }
 }

@@ -48,9 +48,9 @@ private:
 
     juce::ComboBox presetBox;
     juce::TextEditor nameEditor;
-    juce::TextButton saveButton { "保存为新预设" };
-    juce::TextButton deleteButton { "删除预设" };
-    juce::TextButton revealButton { "打开预设文件夹" };
+    juce::TextButton saveButton { u8("保存为新预设") };
+    juce::TextButton deleteButton { u8("删除预设") };
+    juce::TextButton revealButton { u8("打开预设文件夹") };
     juce::Label statusLabel;
     juce::Label descriptionLabel;
 
@@ -61,7 +61,7 @@ private:
     std::vector<std::unique_ptr<SliderRow>> sliderStorage;
     std::vector<SliderRow*> tapeRows, digitalRows, speakerRows;
 
-    juce::ToggleButton bypassButton { "旁通" };
+    juce::ToggleButton bypassButton { u8("旁通") };
     std::unique_ptr<juce::AudioProcessorValueTreeState::ButtonAttachment> bypassAttachment;
     juce::Label mixLabel, outputLabel;
     juce::Slider mixSlider, outputSlider;

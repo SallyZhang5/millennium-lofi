@@ -168,27 +168,34 @@ private:
 class Butterworth
 {
 public:
+    static constexpr int maxSections = 6;
+
     void setupLowpass (double fs, double f0, int order)
     {
-        sections.clear();
-        for (int i = 0; i < order / 2; ++i)
-            sections.push_back (Biquad::lowpass (fs, f0, butterQ (order, i)));
-        for (auto& s : sections) s.reset();
+        /*  never place a corner above 0.45 * fs: coefficients there are badly
+            conditioned and can ring or even go unstable */
+        const double safeF0 = std::min (f0, fs * 0.45);
+        numSections = 0;
+        for (int i = 0; i < order / 2 && numSections < maxSections; ++i)
+            sections[numSections++] = Biquad::lowpass (fs, safeF0, butterQ (order, i));
+        reset();
     }
 
     void setupHighpass (double fs, double f0, int order)
     {
-        sections.clear();
-        for (int i = 0; i < order / 2; ++i)
-            sections.push_back (Biquad::highpass (fs, f0, butterQ (order, i)));
-        for (auto& s : sections) s.reset();
+        const double safeF0 = std::max (5.0, std::min (f0, fs * 0.45));
+        numSections = 0;
+        for (int i = 0; i < order / 2 && numSections < maxSections; ++i)
+            sections[numSections++] = Biquad::highpass (fs, safeF0, butterQ (order, i));
+        reset();
     }
 
-    void reset() { for (auto& s : sections) s.reset(); }
+    void reset() { for (int i = 0; i < numSections; ++i) sections[i].reset(); }
 
     inline float process (float x) noexcept
     {
-        for (auto& s : sections) x = s.process (x);
+        for (int i = 0; i < numSections; ++i)
+            x = sections[i].process (x);
         return x;
     }
 
@@ -200,7 +207,8 @@ private:
         return 1.0 / (2.0 * std::sin (theta));
     }
 
-    std::vector<Biquad> sections;
+    Biquad sections[maxSections];
+    int numSections = 0;
 };
 
 /*  Simple fractional delay line. */
@@ -222,14 +230,19 @@ public:
             writePos = 0;
     }
 
-    /*  delay in samples, may be fractional */
+    /*  delay in samples, may be fractional. The position is wrapped in both
+        directions: a delay outside the buffer must never index out of range. */
     inline float read (float delaySamples) const noexcept
     {
         const int size = static_cast<int> (buffer.size());
         float pos = static_cast<float> (writePos) - 1.0f - delaySamples;
+        if (! std::isfinite (pos))
+            pos = 0.0f;
         while (pos < 0.0f)
             pos += static_cast<float> (size);
-        const int i0 = static_cast<int> (pos);
+        while (pos >= static_cast<float> (size))
+            pos -= static_cast<float> (size);
+        const int i0 = static_cast<int> (pos) % size;
         const float frac = pos - static_cast<float> (i0);
         const int i1 = (i0 + 1) % size;
         return buffer[static_cast<std::size_t> (i0)] * (1.0f - frac)
@@ -288,7 +301,8 @@ public:
             for (auto& a : s.allpass) a.reset();
             s.damp.reset();
             s.early.reset();
-            s.lowState = 0.0f;
+            for (auto& v : s.lowState)
+                v = 0.0f;
         }
     }
 
@@ -321,10 +335,12 @@ public:
         for (int i = 0; i < 4; ++i)
         {
             const float delayed = s.comb[i].read (s.combDelay[i]);
-            /* one pole damping inside the feedback loop */
-            s.lowState = delayed * (1.0f - dampCoef) + s.lowState * dampCoef;
-            acc += (delayed * 0.75f + s.lowState * 0.25f) * 0.25f;
-            s.comb[i].push (x + s.lowState * feedback[i]);
+            /*  one pole damping inside each feedback loop. Every comb needs its
+                own state: sharing one cross-couples the four loops, which can
+                turn the reverb into a tone generator. */
+            s.lowState[i] = delayed * (1.0f - dampCoef) + s.lowState[i] * dampCoef;
+            acc += (delayed * 0.75f + s.lowState[i] * 0.25f) * 0.25f;
+            s.comb[i].push (x + s.lowState[i] * feedback[i]);
         }
 
         float y = acc;
@@ -346,11 +362,11 @@ private:
         float combDelay[4] { 1.0f, 2.0f, 3.0f, 4.0f };
         DelayLine allpass[2];
         float allpassDelay[2] { 1.0f, 2.0f };
-        DelayLine early;
-        float earlyDelay[5] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
-        Biquad damp;
-        float lowState = 0.0f;
-    };
+          DelayLine early;
+          float earlyDelay[5] { 1.0f, 2.0f, 3.0f, 4.0f, 5.0f };
+          Biquad damp;
+          float lowState[4] { 0.0f, 0.0f, 0.0f, 0.0f };
+      };
 
     void updateFeedback()
     {
