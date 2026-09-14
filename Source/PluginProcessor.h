@@ -2,7 +2,10 @@
 
 #include <juce_audio_processors/juce_audio_processors.h>
 
+#include <atomic>
+
 #include "Parameters.h"
+#include "ScopeData.h"
 #include "dsp/LoFiEngine.h"
 
 namespace mlofi
@@ -42,8 +45,15 @@ public:
     juce::AudioProcessorValueTreeState apvts;
     LoFiEngine engine;
 
+    /*  Latest audio for the editor's oscilloscope, and the mode it shows
+        (kept here so the choice survives closing and reopening the window). */
+    ScopeData scopeData;
+    std::atomic<int> scopeMode { 0 };
+
 private:
     juce::AudioBuffer<float> dryBuffer;
+
+    void pushScope (const juce::AudioBuffer<float>&) noexcept;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR (MillenniumLoFiProcessor)
 };

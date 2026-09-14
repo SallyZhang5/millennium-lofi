@@ -26,7 +26,21 @@ void MillenniumLoFiProcessor::prepareToPlay (double sampleRate, int samplesPerBl
 {
     engine.prepare (sampleRate, samplesPerBlock, getTotalNumOutputChannels());
     dryBuffer.setSize (std::max (1, getTotalNumOutputChannels()), std::max (1, samplesPerBlock), false, true, true);
+    scopeData.prepare (sampleRate);
     setLatencySamples (engine.latencySamples());
+}
+
+void MillenniumLoFiProcessor::pushScope (const juce::AudioBuffer<float>& buffer) noexcept
+{
+    const int numSamples = buffer.getNumSamples();
+    const int numChannels = buffer.getNumChannels();
+    if (numSamples <= 0 || numChannels <= 0)
+        return;
+
+    const float* left = buffer.getReadPointer (0);
+    const float* right = numChannels > 1 ? buffer.getReadPointer (1) : left;
+    for (int i = 0; i < numSamples; ++i)
+        scopeData.push (left[i], right[i]);
 }
 
 Params MillenniumLoFiProcessor::readParams() const
@@ -69,7 +83,10 @@ void MillenniumLoFiProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         return;
 
     if (apvts.getRawParameterValue (ids::bypass)->load() > 0.5f)
+    {
+        pushScope (buffer);   // bypassed: the scope shows the untouched input
         return;
+    }
 
     const float mix = apvts.getRawParameterValue (ids::mix)->load();
     const bool needsDry = mix < 0.999f && dryBuffer.getNumSamples() >= numSamples;
@@ -85,6 +102,8 @@ void MillenniumLoFiProcessor::processBlock (juce::AudioBuffer<float>& buffer, ju
         for (int ch = 0; ch < std::min (numChannels, dryBuffer.getNumChannels()); ++ch)
             buffer.addFrom (ch, 0, dryBuffer, ch, 0, numSamples, 1.0f - mix);
     }
+
+    pushScope (buffer);
 }
 
 juce::AudioProcessorEditor* MillenniumLoFiProcessor::createEditor()

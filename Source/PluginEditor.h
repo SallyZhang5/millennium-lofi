@@ -3,6 +3,7 @@
 #include <juce_gui_basics/juce_gui_basics.h>
 
 #include "PluginProcessor.h"
+#include "ScopeDisplay.h"
 #include "XpLookAndFeel.h"
 
 #include <memory>
@@ -11,7 +12,8 @@
 namespace mlofi
 {
 
-class MillenniumLoFiEditor : public juce::AudioProcessorEditor
+class MillenniumLoFiEditor : public juce::AudioProcessorEditor,
+                             private juce::Timer
 {
 public:
     explicit MillenniumLoFiEditor (MillenniumLoFiProcessor&);
@@ -19,6 +21,7 @@ public:
 
     void paint (juce::Graphics&) override;
     void resized() override;
+    void timerCallback() override;
 
 private:
     struct SliderRow
@@ -44,7 +47,9 @@ private:
     MillenniumLoFiProcessor& processor;
     XpLookAndFeel lookAndFeel;
 
-    juce::GroupComponent presetGroup, infoGroup, tapeGroup, digitalGroup, speakerGroup;
+    juce::GroupComponent presetGroup, infoGroup, scopeGroup, tapeGroup, digitalGroup, speakerGroup;
+
+    ScopeDisplay scope;
 
     juce::ComboBox presetBox;
     juce::TextEditor nameEditor;

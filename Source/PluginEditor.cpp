@@ -6,7 +6,7 @@ namespace mlofi
 {
 
 MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
-    : AudioProcessorEditor (&p), processor (p)
+    : AudioProcessorEditor (&p), processor (p), scope (p.scopeData)
 {
     setLookAndFeel (&lookAndFeel);
     setSize (760, 500);
@@ -15,10 +15,11 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     auto& state = processor.apvts;
 
     /* ---- groups ---- */
-    for (auto* group : { &presetGroup, &infoGroup, &tapeGroup, &digitalGroup, &speakerGroup })
+    for (auto* group : { &presetGroup, &infoGroup, &scopeGroup, &tapeGroup, &digitalGroup, &speakerGroup })
         addAndMakeVisible (*group);
     presetGroup.setText (u8("预设"));
     infoGroup.setText (u8("说明"));
+    scopeGroup.setText (u8("示波器"));
     tapeGroup.setText (u8("磁带"));
     digitalGroup.setText (u8("数码"));
     speakerGroup.setText (u8("小喇叭与空间"));
@@ -52,6 +53,24 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     descriptionLabel.setColour (juce::Label::textColourId, juce::Colour (0xff2b2b25));
     descriptionLabel.setJustificationType (juce::Justification::topLeft);
     descriptionLabel.setText (factoryPresets().front().description, juce::dontSendNotification);
+
+    /* ---- oscilloscope ---- */
+    addAndMakeVisible (scope);
+    scope.setMode (static_cast<ScopeDisplay::Mode> (juce::jlimit (
+        0, static_cast<int> (ScopeDisplay::Mode::numModes) - 1, processor.scopeMode.load())));
+    scope.onModeChanged = [this] (ScopeDisplay::Mode newMode)
+    {
+        processor.scopeMode = static_cast<int> (newMode);
+        juce::String name;
+        switch (newMode)
+        {
+            case ScopeDisplay::Mode::rolling:     name = u8("1.5 秒滚动波形"); break;
+            case ScopeDisplay::Mode::vectorscope: name = u8("立体声向量"); break;
+            default:                              name = u8("20 毫秒触发式"); break;
+        }
+        setStatus (u8("示波器已切换：") + name + u8("（再点一下切下一种）"));
+    };
+    startTimerHz (30);
 
     /* ---- sliders ---- */
     /*  The controls are parented to the editor and positioned on top of the group
@@ -111,7 +130,14 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
 
 MillenniumLoFiEditor::~MillenniumLoFiEditor()
 {
+    stopTimer();
     setLookAndFeel (nullptr);
+}
+
+void MillenniumLoFiEditor::timerCallback()
+{
+    /*  the audio thread keeps filling the shared buffer; just repaint */
+    scope.repaint();
 }
 
 /* ------------------------------------------------------------------ */
@@ -166,7 +192,9 @@ void MillenniumLoFiEditor::resized()
     left.removeFromRight (10);
     presetGroup.setBounds (left.removeFromTop (210));
     left.removeFromTop (8);
-    infoGroup.setBounds (left);
+    infoGroup.setBounds (left.removeFromTop (120));
+    left.removeFromTop (8);
+    scopeGroup.setBounds (left);
 
     auto presetArea = presetGroup.getBounds().withTrimmedTop (18).reduced (10, 4);
     presetArea.removeFromBottom (4);
@@ -185,6 +213,8 @@ void MillenniumLoFiEditor::resized()
 
     auto infoArea = infoGroup.getBounds().withTrimmedTop (20).reduced (10, 4);
     descriptionLabel.setBounds (infoArea);
+
+    scope.setBounds (scopeGroup.getBounds().withTrimmedTop (20).reduced (10, 7));
 
     auto right = area;
     tapeGroup.setBounds (right.removeFromTop (18 + 5 * rowHeight + 6));
