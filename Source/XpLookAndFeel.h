@@ -78,6 +78,28 @@ public:
     juce::Font getComboBoxFont (juce::ComboBox&) override { return xp::uiFont (14.0f); }
     juce::Font getPopupMenuFont() override { return xp::uiFont (14.0f); }
 
+    /*  The value boxes next to every slider inherit a very light text colour
+        from the default scheme, which is almost unreadable on a white field.
+        Force a dark, bold read-out. */
+    juce::Label* createSliderTextBox (juce::Slider& slider) override
+    {
+        auto* label = LookAndFeel_V4::createSliderTextBox (slider);
+        label->setColour (juce::Label::textColourId, juce::Colour (0xff123a6b));
+        label->setColour (juce::Label::backgroundColourId, juce::Colours::white);
+        label->setColour (juce::Label::outlineColourId, juce::Colour (0xff7f9db9));
+        label->setFont (xp::uiFont (14.0f, true));
+        return label;
+    }
+
+    /*  Same for the value read-out inside combo boxes. */
+    juce::Label* createComboBoxTextBox (juce::ComboBox& box) override
+    {
+        auto* label = LookAndFeel_V4::createComboBoxTextBox (box);
+        label->setColour (juce::Label::textColourId, juce::Colour (0xff123a6b));
+        label->setFont (xp::uiFont (14.0f));
+        return label;
+    }
+
     /* ---------------- widgets ---------------- */
     void drawButtonBackground (juce::Graphics& g, juce::Button& button,
                                const juce::Colour&, bool highlighted, bool down) override

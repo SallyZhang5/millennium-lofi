@@ -15,10 +15,11 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     auto& state = processor.apvts;
 
     /* ---- groups ---- */
-    for (auto* group : { &presetGroup, &infoGroup, &tapeGroup, &digitalGroup, &speakerGroup })
+    for (auto* group : { &presetGroup, &infoGroup, &statusGroup, &tapeGroup, &digitalGroup, &speakerGroup })
         addAndMakeVisible (*group);
     presetGroup.setText (u8("预设"));
     infoGroup.setText (u8("说明"));
+    statusGroup.setText (u8("状态与提示"));
     tapeGroup.setText (u8("磁带"));
     digitalGroup.setText (u8("数码"));
     speakerGroup.setText (u8("小喇叭与空间"));
@@ -52,6 +53,15 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     descriptionLabel.setColour (juce::Label::textColourId, juce::Colour (0xff2b2b25));
     descriptionLabel.setJustificationType (juce::Justification::topLeft);
     descriptionLabel.setText (factoryPresets().front().description, juce::dontSendNotification);
+
+    addAndMakeVisible (statusHint);
+    statusHint.setFont (xp::uiFont (12.0f));
+    statusHint.setColour (juce::Label::textColourId, juce::Colour (0xff6b6b60));
+    statusHint.setJustificationType (juce::Justification::topLeft);
+    statusHint.setText (u8("保存的预设放在：\n")
+                            + PresetManager::userPresetDirectory().getFullPathName()
+                            + u8("\n\n点「打开预设文件夹」可以直接跳过去；\n把里面的文件拷给别人，对方也能用。"),
+                        juce::dontSendNotification);
 
     /* ---- sliders ---- */
     /*  The controls are parented to the editor and positioned on top of the group
@@ -164,9 +174,11 @@ void MillenniumLoFiEditor::resized()
 
     auto left = area.removeFromLeft (226);
     left.removeFromRight (10);
-    presetGroup.setBounds (left.removeFromTop (210));
+    presetGroup.setBounds (left.removeFromTop (150));
     left.removeFromTop (8);
-    infoGroup.setBounds (left);
+    infoGroup.setBounds (left.removeFromTop (150));
+    left.removeFromTop (8);
+    statusGroup.setBounds (left);
 
     auto presetArea = presetGroup.getBounds().withTrimmedTop (18).reduced (10, 4);
     presetArea.removeFromBottom (4);
@@ -180,11 +192,16 @@ void MillenniumLoFiEditor::resized()
     deleteButton.setBounds (buttonRow.removeFromLeft (95));
     presetArea.removeFromTop (6);
     revealButton.setBounds (presetArea.removeFromTop (24));
-    presetArea.removeFromTop (6);
-    statusLabel.setBounds (presetArea);
 
     auto infoArea = infoGroup.getBounds().withTrimmedTop (20).reduced (10, 4);
     descriptionLabel.setBounds (infoArea);
+
+    /*  the status message and the preset folder hint share the bottom box, so
+        the left column no longer ends in a large empty panel */
+    auto statusArea = statusGroup.getBounds().withTrimmedTop (20).reduced (10, 6);
+    statusLabel.setBounds (statusArea.removeFromTop (46));
+    statusArea.removeFromTop (6);
+    statusHint.setBounds (statusArea);
 
     auto right = area;
     tapeGroup.setBounds (right.removeFromTop (18 + 5 * rowHeight + 6));
