@@ -91,9 +91,12 @@ public:
         {
             for (const auto& property : object->getProperties())
             {
-                if (property.name == "name" || property.name == "format")
+                /*  compare as String: comparing an Identifier with a string
+                    literal is ambiguous for MSVC */
+                const auto key = property.name.toString();
+                if (key == "name" || key == "format")
                     continue;
-                setParameter (state, property.name.toString(),
+                setParameter (state, key,
                               static_cast<float> (static_cast<double> (property.value)));
             }
             return true;
