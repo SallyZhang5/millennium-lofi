@@ -55,6 +55,12 @@ target_compile_definitions(MillenniumLoFi PUBLIC
 
 target_include_directories(MillenniumLoFi PRIVATE Source)
 
+# MSVC would otherwise read the UTF-8 sources using the system code page,
+# which turns every Chinese string in the interface into mojibake.
+if (MSVC)
+    target_compile_options(MillenniumLoFi PRIVATE /utf-8)
+endif()
+
 target_link_libraries(MillenniumLoFi
     PRIVATE
         juce::juce_audio_utils

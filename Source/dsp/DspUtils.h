@@ -1,4 +1,4 @@
-/*
+﻿/*
     Small self contained DSP helpers.
 
     These live outside the JUCE layer on purpose: the whole audio engine can be

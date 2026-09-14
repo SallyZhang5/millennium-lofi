@@ -1,4 +1,4 @@
-/*  Parameter definitions and factory presets, shared by processor and editor. */
+﻿/*  Parameter definitions and factory presets, shared by processor and editor. */
 
 #pragma once
 

@@ -1,4 +1,4 @@
-#include "PluginEditor.h"
+﻿#include "PluginEditor.h"
 
 #include "PresetManager.h"
 
@@ -54,14 +54,16 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     descriptionLabel.setText (factoryPresets().front().description, juce::dontSendNotification);
 
     /* ---- sliders ---- */
-    addSliderRow (tapeGroup, tapeRows, ids::wow, "磁带抖晃", "", 2);
-    addSliderRow (tapeGroup, tapeRows, ids::drive, "过载失真", "", 2);
-    addSliderRow (tapeGroup, tapeRows, ids::hissDb, "底噪嘶声", " dB", 0);
-    addSliderRow (tapeGroup, tapeRows, ids::humDb, "电流嗡声", " dB", 0);
-    addSliderRow (tapeGroup, tapeRows, ids::tapeLowpass, "磁带高频衰减", " Hz", 0);
+    /*  The controls are parented to the editor and positioned on top of the group
+        frames, so the layout does not depend on the group components. */
+    addSliderRow (*this, tapeRows, ids::wow, "磁带抖晃", "", 2);
+    addSliderRow (*this, tapeRows, ids::drive, "过载失真", "", 2);
+    addSliderRow (*this, tapeRows, ids::hissDb, "底噪嘶声", " dB", 0);
+    addSliderRow (*this, tapeRows, ids::humDb, "电流嗡声", " dB", 0);
+    addSliderRow (*this, tapeRows, ids::tapeLowpass, "磁带高频衰减", " Hz", 0);
 
-    addSliderRow (digitalGroup, digitalRows, ids::bitDepth, "颗粒感（位深）", " bit", 0);
-    addSliderRow (digitalGroup, digitalRows, ids::sampleRate, "数码采样率", " Hz", 0);
+    addSliderRow (*this, digitalRows, ids::bitDepth, "颗粒感（位深）", " bit", 0);
+    addSliderRow (*this, digitalRows, ids::sampleRate, "数码采样率", " Hz", 0);
 
     addAndMakeVisible (codecLabel);
     codecLabel.setText ("MP3 码率", juce::dontSendNotification);
@@ -70,11 +72,11 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
     codecAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment> (
         state, ids::codecKbps, codecBox);
 
-    addSliderRow (speakerGroup, speakerRows, ids::speakerHighpass, "低音削减", " Hz", 0);
-    addSliderRow (speakerGroup, speakerRows, ids::speakerLowpass, "小喇叭高频", " Hz", 0);
-    addSliderRow (speakerGroup, speakerRows, ids::resonance, "喇叭共鸣", "", 2);
-    addSliderRow (speakerGroup, speakerRows, ids::reverb, "空间混响", "", 2);
-    addSliderRow (speakerGroup, speakerRows, ids::width, "立体声宽度", "", 2);
+    addSliderRow (*this, speakerRows, ids::speakerHighpass, "低音削减", " Hz", 0);
+    addSliderRow (*this, speakerRows, ids::speakerLowpass, "小喇叭高频", " Hz", 0);
+    addSliderRow (*this, speakerRows, ids::resonance, "喇叭共鸣", "", 2);
+    addSliderRow (*this, speakerRows, ids::reverb, "空间混响", "", 2);
+    addSliderRow (*this, speakerRows, ids::width, "立体声宽度", "", 2);
 
     /* ---- bottom row ---- */
     addAndMakeVisible (bypassButton);
@@ -101,6 +103,10 @@ MillenniumLoFiEditor::MillenniumLoFiEditor (MillenniumLoFiProcessor& p)
         state, ids::outputDb, outputSlider);
 
     setStatus ("工厂预设可以直接用；调好后在左边起个名字保存成你自己的预设。");
+
+    /*  Lay the editor out once here as well: some hosts never resize the window
+        after it is created, in which case resized() would never see the controls. */
+    resized();
 }
 
 MillenniumLoFiEditor::~MillenniumLoFiEditor()
@@ -134,17 +140,18 @@ void MillenniumLoFiEditor::addSliderRow (juce::Component& parent, std::vector<Sl
     sliderStorage.push_back (std::move (row));
 }
 
-void MillenniumLoFiEditor::layoutRows (juce::Component& parent, const std::vector<SliderRow*>& rows,
+/*  Rows live directly on the editor, so their bounds are the group's position
+    plus an inset. */
+void MillenniumLoFiEditor::layoutRows (const juce::Component& group, const std::vector<SliderRow*>& rows,
                                        int firstRowY, int height)
 {
-    const int rowTop = firstRowY;
-    const int left = 12;
-    const int totalWidth = parent.getWidth() - left * 2;
+    const int left = group.getX() + 12;
+    const int totalWidth = group.getWidth() - 24;
+    const int nameWidth = 104;
     for (std::size_t i = 0; i < rows.size(); ++i)
     {
         auto* row = rows[i];
-        const int y = rowTop + static_cast<int> (i) * height;
-        const int nameWidth = 104;
+        const int y = group.getY() + firstRowY + static_cast<int> (i) * height;
         row->label.setBounds (left, y, nameWidth, height);
         row->slider.setBounds (left + nameWidth + 4, y, totalWidth - nameWidth - 4, height);
     }
@@ -237,6 +244,26 @@ void MillenniumLoFiEditor::paint (juce::Graphics& g)
     g.setFont (xp::uiFont (15.0f, true));
     g.drawText ("千禧年声音 · Millennium LoFi · 实时插件版",
                 title.reduced (10, 0), juce::Justification::centredLeft, false);
+
+    /*  ---- temporary diagnostics (removed once the layout is confirmed) ---- */
+    juce::String info;
+    info << "rows " << (int) tapeRows.size() << "/" << (int) digitalRows.size()
+         << "/" << (int) speakerRows.size();
+    info << "  tapeG " << tapeGroup.getWidth() << "x" << tapeGroup.getHeight()
+         << " @" << tapeGroup.getX() << "," << tapeGroup.getY();
+    if (! tapeRows.empty())
+    {
+        auto* row = tapeRows.front();
+        auto b = row->slider.getBounds();
+        info << "  slider " << b.getX() << "," << b.getY() << " " << b.getWidth() << "x" << b.getHeight()
+             << " vis=" << (int) row->slider.isVisible()
+             << " childOfEditor=" << (int) (row->slider.getParentComponent() == this)
+             << " gvis=" << (int) tapeGroup.isVisible();
+    }
+    g.setColour (juce::Colours::magenta);
+    g.setFont (13.0f);
+    g.drawText (info, getLocalBounds().removeFromTop (titleHeight).reduced (6, 0),
+                juce::Justification::centredRight, false);
 }
 
 /* ------------------------------------------------------------------ */

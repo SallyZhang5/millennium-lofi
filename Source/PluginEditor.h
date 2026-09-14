@@ -1,4 +1,4 @@
-#pragma once
+﻿#pragma once
 
 #include <juce_gui_basics/juce_gui_basics.h>
 
@@ -31,7 +31,7 @@ private:
     void addSliderRow (juce::Component& parent, std::vector<SliderRow*>& rows,
                        const juce::String& parameterId, const juce::String& label,
                        const juce::String& suffix, int decimals);
-    void layoutRows (juce::Component& parent, const std::vector<SliderRow*>& rows,
+    void layoutRows (const juce::Component& group, const std::vector<SliderRow*>& rows,
                      int firstRowY, int rowHeight);
 
     void refreshPresetList();
